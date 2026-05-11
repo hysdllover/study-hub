@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 진도 체크리스트</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .subject-section { margin-bottom: 2rem; }
+  .subject-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .subject-section-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.15rem;
+    color: var(--navy);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .progress-meter {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    color: var(--ink-light);
+  }
+  .progress-bar {
+    width: 120px;
+    height: 6px;
+    background: var(--line-soft);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--navy-soft), var(--navy));
+    transition: width 0.3s ease;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 0.4rem;
+    transition: opacity 0.15s ease;
+  }
+  .check-item.done { opacity: 0.55; background: var(--olive-pale); }
+  .check-item.done .check-text { text-decoration: line-through; color: var(--ink-light); }
+
+  .check-cb {
+    width: 18px; height: 18px;
+    accent-color: var(--olive);
+    cursor: pointer;
+  }
+  .check-text {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    border: none;
+    background: transparent;
+    padding: 0.1rem;
+  }
+  .check-text:focus { outline: 1px solid var(--navy-soft); border-radius: 3px; }
+
+  .add-inline {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .add-inline .input { flex: 1; }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Progress Tracker</div>
+    <h1 class="page-title">진도 체크리스트</h1>
+    <p class="page-subtitle">과목별 학습 진도를 체크리스트로 관리합니다. 단원·강·문제집 단위로 자유롭게 항목을 추가하세요.</p>
+  </header>
+
+  <div class="toolbar no-print">
+    <select class="select" id="filter-subject" onchange="render()" style="max-width: 200px;">
+      <option value="">전체 과목</option>
+    </select>
+    <label class="retry-toggle" style="display:flex; align-items:center; gap:0.4rem; font-family: var(--font-sans); font-size: 0.85rem;">
+      <input type="checkbox" id="hide-done" onchange="render()"> 완료 항목 숨기기
+    </label>
+    <div class="toolbar-spacer"></div>
+    <button class="btn" onclick="window.print()">🖶 인쇄/PDF</button>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('checklist');
+
+  function populateSelectors() {
+    const sel = document.getElementById('filter-subject');
+    sel.innerHTML = `<option value="">전체 과목</option>` +
+      DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  }
+
+  function addItem(subjectId, inputEl) {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    DATA.checklist.push({ id: newId('cl'), subjectId, text, done: false, createdAt: Date.now() });
+    commit();
+    inputEl.value = '';
+    render();
+    setTimeout(() => { document.getElementById(`add-${subjectId}`)?.focus(); }, 50);
+  }
+
+  function toggle(id) {
+    const it = DATA.checklist.find(x => x.id === id);
+    it.done = !it.done;
+    commit();
+    render();
+  }
+
+  function updateText(id, value) {
+    const it = DATA.checklist.find(x => x.id === id);
+    const v = value.trim();
+    if (!v) { remove(id); return; }
+    it.text = v;
+    commit();
+  }
+
+  function remove(id) {
+    DATA.checklist = DATA.checklist.filter(x => x.id !== id);
+    commit();
+    render();
+  }
+
+  function render() {
+    populateSelectors();
+    const fsub = document.getElementById('filter-subject').value;
+    const hideDone = document.getElementById('hide-done').checked;
+
+    const subjects = fsub
+      ? DATA.subjects.filter(s => s.id === fsub)
+      : DATA.subjects;
+
+    if (subjects.length === 0) {
+      document.getElementById('list').innerHTML =
+        `<div class="empty"><div class="empty-mark">·</div>등록된 과목이 없습니다.<br><a href="subjects.html" class="btn btn-sm" style="margin-top:0.5rem;">과목 추가하러 가기</a></div>`;
+      return;
+    }
+
+    document.getElementById('list').innerHTML = subjects.map(s => {
+      let items = DATA.checklist.filter(c => c.subjectId === s.id);
+      const total = items.length;
+      const done = items.filter(i => i.done).length;
+      const pct = total ? Math.round(done / total * 100) : 0;
+
+      if (hideDone) items = items.filter(i => !i.done);
+
+      return `
+        <section class="subject-section">
+          <div class="subject-section-head">
+            <div class="subject-section-title">
+              <span class="subject-dot dot-${s.color}"></span>
+              ${escapeHtml(s.name)}
+            </div>
+            <div class="progress-meter">
+              <span>${done} / ${total}</span>
+              <div class="progress-bar"><div class="progress-fill" style="width: ${pct}%;"></div></div>
+              <span>${pct}%</span>
+            </div>
+          </div>
+          ${items.length === 0
+            ? `<div class="text-sm text-muted" style="padding: 0.5rem 0;">${hideDone ? '완료된 항목만 있거나 항목이 없습니다.' : '항목이 없습니다.'}</div>`
+            : items.map(i => `
+              <div class="check-item ${i.done ? 'done' : ''}">
+                <input type="checkbox" class="check-cb" ${i.done ? 'checked' : ''} onchange="toggle('${i.id}')">
+                <input type="text" class="check-text" value="${escapeHtml(i.text)}" onchange="updateText('${i.id}', this.value)">
+                <button class="btn btn-sm btn-ghost btn-danger no-print" onclick="remove('${i.id}')">×</button>
+              </div>`).join('')}
+          <div class="add-inline no-print">
+            <input type="text" class="input" id="add-${s.id}" placeholder="+ 새 항목 (예: 수특 영어 7강 / 함수의 극한 단원)"
+                   onkeydown="if(event.key==='Enter') addItem('${s.id}', this)">
+            <button class="btn" onclick="addItem('${s.id}', document.getElementById('add-${s.id}'))">추가</button>
+          </div>
+        </section>`;
+    }).join('');
+  }
+
+  render();
+</script>
+</body>
+</html>

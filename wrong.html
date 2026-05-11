@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 오답 노트</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .wrong-item {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 0.9rem;
+    position: relative;
+  }
+  .wrong-item.resolved { background: var(--olive-pale); border-color: #cdd4c5; }
+
+  .wrong-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--line);
+  }
+  .wrong-source {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--navy);
+  }
+
+  .wrong-section {
+    margin-bottom: 0.75rem;
+  }
+  .wrong-label {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    color: var(--ink-light);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+  }
+  .wrong-content {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  .wrong-answer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .answer-box {
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+  }
+  .answer-wrong { background: var(--rose-pale); color: #8a4248; }
+  .answer-correct { background: var(--olive-pale); color: #4a5440; }
+
+  .reason-block {
+    background: var(--violet-pale);
+    border-left: 3px solid var(--violet);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+
+  .retry-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .retry-toggle input { width: 16px; height: 16px; }
+
+  /* Add form */
+  .add-form .form-grid { display: grid; gap: 0.85rem; }
+
+  @media (max-width: 700px) {
+    .wrong-answer-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Mistake Log</div>
+    <h1 class="page-title">오답 노트</h1>
+    <p class="page-subtitle">틀린 문제를 기록하고 원인을 분석합니다. 다시 풀어 본 문제는 체크하여 관리합니다.</p>
+  </header>
+
+  <div class="card mb-2 no-print add-form">
+    <div class="card-header">
+      <div class="card-title">새 오답 추가</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-grid form-grid-2">
+        <div>
+          <label class="label">과목</label>
+          <select class="select" id="f-subject"></select>
+        </div>
+        <div>
+          <label class="label">출처 (시험·문제집·페이지)</label>
+          <input type="text" class="input" id="f-source" placeholder="예: 2025 6평 32번, 수특 영어 14강 4번">
+        </div>
+      </div>
+      <div>
+        <label class="label">문제 요약</label>
+        <textarea class="textarea" id="f-question" placeholder="문제의 핵심을 간략히 적거나 사진 대신 텍스트로 정리"></textarea>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div>
+          <label class="label">내 답</label>
+          <input type="text" class="input" id="f-my">
+        </div>
+        <div>
+          <label class="label">정답</label>
+          <input type="text" class="input" id="f-correct">
+        </div>
+      </div>
+      <div>
+        <label class="label">틀린 이유 / 풀이 / 개념 보완</label>
+        <textarea class="textarea" id="f-reason" placeholder="개념 부족? 실수? 함정? 어떤 부분에서 막혔는지, 어떻게 해결했는지 정리"></textarea>
+      </div>
+      <div>
+        <button class="btn btn-primary" onclick="addWrong()">+ 오답 추가</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar no-print">
+    <select class="select" id="filter-subject" onchange="render()" style="max-width: 180px;">
+      <option value="">전체 과목</option>
+    </select>
+    <select class="select" id="filter-status" onchange="render()" style="max-width: 160px;">
+      <option value="">전체 상태</option>
+      <option value="unresolved">미해결만</option>
+      <option value="resolved">해결만</option>
+    </select>
+    <input type="text" class="input" id="filter-search" placeholder="출처·내용 검색" oninput="render()" style="max-width: 220px;">
+    <div class="toolbar-spacer"></div>
+    <button class="btn" onclick="window.print()">🖶 인쇄/PDF</button>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('wrong');
+
+  function populateSubjectSelectors() {
+    const opts = DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    document.getElementById('f-subject').innerHTML = opts;
+    document.getElementById('filter-subject').innerHTML =
+      `<option value="">전체 과목</option>` + opts;
+  }
+
+  function addWrong() {
+    const subjectId = document.getElementById('f-subject').value;
+    const source = document.getElementById('f-source').value.trim();
+    const question = document.getElementById('f-question').value.trim();
+    const myAnswer = document.getElementById('f-my').value.trim();
+    const correctAnswer = document.getElementById('f-correct').value.trim();
+    const reason = document.getElementById('f-reason').value.trim();
+
+    if (!subjectId) { alert('과목을 선택하세요.'); return; }
+    if (!source && !question) { alert('출처나 문제 중 하나는 입력하세요.'); return; }
+
+    DATA.wrongs.unshift({
+      id: newId('w'), subjectId, source, question, myAnswer, correctAnswer, reason,
+      retry: false, createdAt: Date.now()
+    });
+    commit();
+
+    ['f-source','f-question','f-my','f-correct','f-reason'].forEach(id => document.getElementById(id).value = '');
+    render();
+  }
+
+  function toggleRetry(id) {
+    const w = DATA.wrongs.find(x => x.id === id);
+    w.retry = !w.retry;
+    commit();
+    render();
+  }
+
+  function deleteWrong(id) {
+    if (!confirm('이 오답 기록을 삭제할까요?')) return;
+    DATA.wrongs = DATA.wrongs.filter(w => w.id !== id);
+    commit();
+    render();
+  }
+
+  function filtered() {
+    const fsub = document.getElementById('filter-subject')?.value || '';
+    const fst = document.getElementById('filter-status')?.value || '';
+    const fq = (document.getElementById('filter-search')?.value || '').toLowerCase();
+    return DATA.wrongs
+      .filter(w => !fsub || w.subjectId === fsub)
+      .filter(w => !fst || (fst === 'resolved' ? w.retry : !w.retry))
+      .filter(w => {
+        if (!fq) return true;
+        return [w.source, w.question, w.reason].some(x => (x || '').toLowerCase().includes(fq));
+      });
+  }
+
+  function render() {
+    populateSubjectSelectors();
+    const list = document.getElementById('list');
+    const items = filtered();
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="empty-mark">·</div>오답 기록이 없습니다.</div>`;
+      return;
+    }
+    list.innerHTML = items.map(w => {
+      const sub = getSubject(w.subjectId);
+      return `
+        <div class="wrong-item ${w.retry ? 'resolved' : ''}">
+          <div class="wrong-head">
+            <div class="flex gap-1" style="align-items: center;">
+              <span class="subject-tag tag-${sub ? sub.color : 'navy'}">
+                <span class="subject-dot dot-${sub ? sub.color : 'navy'}"></span>
+                ${escapeHtml(sub ? sub.name : '기타')}
+              </span>
+              ${w.source ? `<span class="wrong-source">${escapeHtml(w.source)}</span>` : ''}
+            </div>
+            <div class="flex gap-1 no-print" style="align-items: center;">
+              <label class="retry-toggle">
+                <input type="checkbox" ${w.retry ? 'checked' : ''} onchange="toggleRetry('${w.id}')">
+                다시 풀어봄
+              </label>
+              <button class="btn btn-sm btn-ghost btn-danger" onclick="deleteWrong('${w.id}')">삭제</button>
+            </div>
+          </div>
+
+          ${w.question ? `
+            <div class="wrong-section">
+              <div class="wrong-label">문제</div>
+              <div class="wrong-content">${escapeHtml(w.question)}</div>
+            </div>` : ''}
+
+          ${(w.myAnswer || w.correctAnswer) ? `
+            <div class="wrong-section">
+              <div class="wrong-answer-row">
+                ${w.myAnswer ? `<div><div class="wrong-label">내 답</div><div class="answer-box answer-wrong">${escapeHtml(w.myAnswer)}</div></div>` : '<div></div>'}
+                ${w.correctAnswer ? `<div><div class="wrong-label">정답</div><div class="answer-box answer-correct">${escapeHtml(w.correctAnswer)}</div></div>` : '<div></div>'}
+              </div>
+            </div>` : ''}
+
+          ${w.reason ? `
+            <div class="wrong-section">
+              <div class="wrong-label">분석 / 보완</div>
+              <div class="reason-block">${escapeHtml(w.reason)}</div>
+            </div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  render();
+</script>
+</body>
+</html>

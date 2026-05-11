@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 암기 카드</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  /* Two modes: list mode (manage) + study mode (flashcard) */
+  .mode-toggle {
+    display: inline-flex;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .mode-btn {
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .mode-btn.active { background: var(--navy); color: white; }
+
+  /* List */
+  .card-row {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+  }
+  .card-row.known { background: var(--olive-pale); }
+  .card-row input[type=text] {
+    border: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    padding: 0.2rem;
+  }
+  .card-row input[type=text]:focus { outline: 1px solid var(--navy-soft); border-radius: 3px; }
+
+  /* Study mode */
+  .study-area { display: flex; flex-direction: column; align-items: center; }
+  .flashcard {
+    width: min(560px, 92vw);
+    height: 320px;
+    perspective: 1200px;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+  }
+  .flashcard-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
+  }
+  .flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 2rem;
+    text-align: center;
+  }
+  .face-back {
+    transform: rotateY(180deg);
+    background: linear-gradient(135deg, #f9f6f1 0%, #f3eee5 100%);
+  }
+  .face-label {
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    position: absolute;
+    top: 1rem;
+    left: 1.25rem;
+  }
+  .face-content {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.7rem;
+    color: var(--navy);
+    line-height: 1.4;
+    word-break: keep-all;
+  }
+  .face-back .face-content {
+    font-family: var(--font-body);
+    font-size: 1.15rem;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .study-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .study-info {
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    color: var(--ink-light);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Print: list as 2-column flashcards */
+  @media print {
+    .study-area, .mode-toggle, .toolbar { display: none !important; }
+    #list { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .card-row {
+      grid-template-columns: 1fr 1fr !important;
+      page-break-inside: avoid;
+      background: white !important;
+    }
+    .card-row > .ck, .card-row > .actions { display: none; }
+  }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Flashcards</div>
+    <h1 class="page-title">암기 카드</h1>
+    <p class="page-subtitle">단어·개념·공식을 카드로 만들어 반복 학습합니다. 학습 모드에서는 클릭으로 카드를 뒤집을 수 있습니다.</p>
+  </header>
+
+  <div class="toolbar no-print">
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="list" onclick="setMode('list')">목록</button>
+      <button class="mode-btn" data-mode="study" onclick="setMode('study')">학습</button>
+    </div>
+    <select class="select" id="filter-subject" onchange="onFilterChange()" style="max-width: 180px;">
+      <option value="">전체 과목</option>
+    </select>
+    <select class="select" id="filter-known" onchange="onFilterChange()" style="max-width: 160px;">
+      <option value="">전체</option>
+      <option value="unknown">미숙만</option>
+      <option value="known">완료만</option>
+    </select>
+    <input type="text" class="input" id="filter-search" placeholder="검색" oninput="onFilterChange()" style="max-width: 200px;">
+    <div class="toolbar-spacer"></div>
+    <button class="btn" onclick="window.print()">🖶 인쇄/PDF</button>
+  </div>
+
+  <!-- LIST MODE -->
+  <div id="list-mode">
+    <div class="card mb-2 no-print">
+      <div class="card-header">
+        <div class="card-title">새 카드 추가</div>
+      </div>
+      <div class="form-grid">
+        <div class="form-grid form-grid-2">
+          <div>
+            <label class="label">과목</label>
+            <select class="select" id="f-subject"></select>
+          </div>
+          <div></div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div>
+            <label class="label">앞면 (단어 / 개념)</label>
+            <input type="text" class="input" id="f-front">
+          </div>
+          <div>
+            <label class="label">뒷면 (뜻 / 설명)</label>
+            <input type="text" class="input" id="f-back">
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-primary" onclick="addCard()">+ 카드 추가</button>
+          <span class="text-muted text-sm" style="margin-left: 0.5rem;">Enter로 빠르게 추가 가능</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="list"></div>
+  </div>
+
+  <!-- STUDY MODE -->
+  <div id="study-mode" style="display: none;">
+    <div class="study-area">
+      <div class="study-info" id="study-info"></div>
+      <div class="flashcard" id="flashcard" onclick="flipCard()">
+        <div class="flashcard-inner">
+          <div class="face">
+            <div class="face-label">Front</div>
+            <div class="face-content" id="face-front"></div>
+          </div>
+          <div class="face face-back">
+            <div class="face-label">Back</div>
+            <div class="face-content" id="face-back"></div>
+          </div>
+        </div>
+      </div>
+      <div class="study-controls">
+        <button class="btn" onclick="prevCard()">← 이전</button>
+        <button class="btn btn-primary" onclick="markUnknown()">미숙</button>
+        <button class="btn btn-primary" style="background: var(--olive); border-color: var(--olive);" onclick="markKnown()">완료</button>
+        <button class="btn" onclick="nextCard()">다음 →</button>
+        <button class="btn btn-ghost" onclick="shuffleStudy()">섞기</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('flashcard');
+
+  let mode = 'list';
+  let studyList = [];
+  let studyIdx = 0;
+
+  function populateSelectors() {
+    const opts = DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    document.getElementById('f-subject').innerHTML = opts;
+    document.getElementById('filter-subject').innerHTML = `<option value="">전체 과목</option>` + opts;
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    document.getElementById('list-mode').style.display  = m === 'list'  ? '' : 'none';
+    document.getElementById('study-mode').style.display = m === 'study' ? '' : 'none';
+    if (m === 'study') startStudy();
+  }
+
+  function addCard() {
+    const subjectId = document.getElementById('f-subject').value;
+    const front = document.getElementById('f-front').value.trim();
+    const back = document.getElementById('f-back').value.trim();
+    if (!subjectId) { alert('과목을 선택하세요.'); return; }
+    if (!front || !back) { alert('앞면과 뒷면을 모두 입력하세요.'); return; }
+
+    DATA.cards.unshift({ id: newId('c'), subjectId, front, back, known: false, createdAt: Date.now() });
+    commit();
+    document.getElementById('f-front').value = '';
+    document.getElementById('f-back').value = '';
+    document.getElementById('f-front').focus();
+    renderList();
+  }
+
+  // Enter shortcut
+  ['f-front','f-back'].forEach(id => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') addCard(); });
+    });
+  });
+
+  function updateCard(id, patch) {
+    const c = DATA.cards.find(x => x.id === id);
+    Object.assign(c, patch);
+    commit();
+  }
+
+  function toggleKnown(id) {
+    const c = DATA.cards.find(x => x.id === id);
+    c.known = !c.known;
+    commit();
+    renderList();
+  }
+
+  function deleteCard(id) {
+    if (!confirm('이 카드를 삭제할까요?')) return;
+    DATA.cards = DATA.cards.filter(c => c.id !== id);
+    commit();
+    renderList();
+  }
+
+  function filtered() {
+    const fsub = document.getElementById('filter-subject')?.value || '';
+    const fk = document.getElementById('filter-known')?.value || '';
+    const fq = (document.getElementById('filter-search')?.value || '').toLowerCase();
+    return DATA.cards
+      .filter(c => !fsub || c.subjectId === fsub)
+      .filter(c => !fk || (fk === 'known' ? c.known : !c.known))
+      .filter(c => !fq || c.front.toLowerCase().includes(fq) || c.back.toLowerCase().includes(fq));
+  }
+
+  function onFilterChange() {
+    if (mode === 'list') renderList();
+    else startStudy();
+  }
+
+  function renderList() {
+    const list = document.getElementById('list');
+    const items = filtered();
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="empty-mark">·</div>카드가 없습니다.</div>`;
+      return;
+    }
+    list.innerHTML = items.map(c => {
+      const sub = getSubject(c.subjectId);
+      return `
+        <div class="card-row ${c.known ? 'known' : ''}">
+          <span class="subject-tag tag-${sub ? sub.color : 'navy'}">
+            <span class="subject-dot dot-${sub ? sub.color : 'navy'}"></span>
+            ${escapeHtml(sub ? sub.name : '기타')}
+          </span>
+          <input type="text" value="${escapeHtml(c.front)}" onchange="updateCard('${c.id}', {front: this.value})">
+          <input type="text" value="${escapeHtml(c.back)}"  onchange="updateCard('${c.id}', {back: this.value})">
+          <label class="ck retry-toggle no-print" style="display:flex; align-items:center; gap:0.3rem; font-family: var(--font-sans); font-size: 0.78rem;">
+            <input type="checkbox" ${c.known ? 'checked' : ''} onchange="toggleKnown('${c.id}')"> 완료
+          </label>
+          <button class="btn btn-sm btn-ghost btn-danger actions no-print" onclick="deleteCard('${c.id}')">×</button>
+        </div>`;
+    }).join('');
+  }
+
+  // ---- Study mode ----
+  function startStudy() {
+    studyList = filtered();
+    studyIdx = 0;
+    if (studyList.length === 0) {
+      document.getElementById('study-info').textContent = '학습할 카드가 없습니다.';
+      document.getElementById('face-front').textContent = '—';
+      document.getElementById('face-back').textContent = '—';
+      return;
+    }
+    renderStudy();
+  }
+
+  function renderStudy() {
+    const c = studyList[studyIdx];
+    document.getElementById('flashcard').classList.remove('flipped');
+    document.getElementById('face-front').textContent = c.front;
+    document.getElementById('face-back').textContent = c.back;
+    const sub = getSubject(c.subjectId);
+    document.getElementById('study-info').textContent =
+      `${studyIdx + 1} / ${studyList.length} · ${sub ? sub.name : '기타'} · ${c.known ? '완료' : '미숙'}`;
+  }
+
+  function flipCard() { document.getElementById('flashcard').classList.toggle('flipped'); }
+  function nextCard() { if (studyList.length === 0) return; studyIdx = (studyIdx + 1) % studyList.length; renderStudy(); }
+  function prevCard() { if (studyList.length === 0) return; studyIdx = (studyIdx - 1 + studyList.length) % studyList.length; renderStudy(); }
+
+  function markKnown() {
+    if (studyList.length === 0) return;
+    studyList[studyIdx].known = true;
+    commit();
+    nextCard();
+  }
+  function markUnknown() {
+    if (studyList.length === 0) return;
+    studyList[studyIdx].known = false;
+    commit();
+    nextCard();
+  }
+  function shuffleStudy() {
+    for (let i = studyList.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [studyList[i], studyList[j]] = [studyList[j], studyList[i]];
+    }
+    studyIdx = 0;
+    renderStudy();
+  }
+
+  // keyboard shortcuts in study mode
+  document.addEventListener('keydown', e => {
+    if (mode !== 'study') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.code === 'Space') { e.preventDefault(); flipCard(); }
+    if (e.key === 'ArrowRight') nextCard();
+    if (e.key === 'ArrowLeft') prevCard();
+    if (e.key === '1') markUnknown();
+    if (e.key === '2') markKnown();
+  });
+
+  populateSelectors();
+  renderList();
+</script>
+</body>
+</html>

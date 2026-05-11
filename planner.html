@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 일정 플래너</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .week-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .week-label {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.15rem;
+    color: var(--navy);
+  }
+
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.6rem;
+  }
+  .day-col {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.6rem;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+  }
+  .day-col.today { border-color: var(--navy); border-width: 2px; }
+  .day-col.weekend .day-num { color: var(--rose); }
+
+  .day-head {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px dashed var(--line);
+  }
+  .day-name {
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    color: var(--ink-light);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .day-num {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.5rem;
+    color: var(--navy);
+    line-height: 1;
+    margin-top: 0.15rem;
+  }
+
+  .plan-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.4rem 0.45rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    background: var(--bg);
+  }
+  .plan-item.done { opacity: 0.5; }
+  .plan-item.done .plan-text { text-decoration: line-through; }
+  .plan-cb { margin-top: 0.2rem; cursor: pointer; flex-shrink: 0; accent-color: var(--olive); }
+  .plan-text { flex: 1; word-break: keep-all; font-family: var(--font-body); }
+  .plan-x {
+    cursor: pointer;
+    opacity: 0;
+    color: var(--ink-light);
+    font-size: 0.9rem;
+    transition: opacity 0.15s ease;
+  }
+  .plan-item:hover .plan-x { opacity: 0.7; }
+  .plan-x:hover { opacity: 1 !important; color: #a85055; }
+
+  .plan-subject-dot {
+    width: 4px;
+    align-self: stretch;
+    border-radius: 2px;
+    margin-right: 0.1rem;
+  }
+  .plan-dot-navy   { background: var(--navy); }
+  .plan-dot-olive  { background: var(--olive); }
+  .plan-dot-violet { background: var(--violet); }
+  .plan-dot-rose   { background: var(--rose); }
+
+  .day-add {
+    margin-top: auto;
+    padding-top: 0.4rem;
+  }
+  .day-add-input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--bg);
+  }
+  .day-add-input:focus { outline: none; border-color: var(--navy-soft); }
+  .day-add-subject {
+    width: 100%;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    padding: 0.25rem;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--bg);
+    margin-bottom: 0.25rem;
+  }
+
+  @media (max-width: 900px) {
+    .week-grid { grid-template-columns: 1fr; }
+    .day-col { min-height: auto; }
+  }
+
+  @media print {
+    .week-grid { grid-template-columns: repeat(7, 1fr); }
+    .day-col { background: white !important; min-height: 200px; }
+    .day-add { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Weekly Planner</div>
+    <h1 class="page-title">일정 플래너</h1>
+    <p class="page-subtitle">주간 단위로 학습 계획을 세우고 실행 여부를 체크합니다.</p>
+  </header>
+
+  <div class="toolbar no-print">
+    <select class="select" id="filter-subject" onchange="render()" style="max-width: 200px;">
+      <option value="">전체 과목 표시</option>
+    </select>
+    <div class="toolbar-spacer"></div>
+    <button class="btn" onclick="window.print()">🖶 인쇄/PDF</button>
+  </div>
+
+  <div class="week-nav no-print">
+    <button class="btn btn-ghost" onclick="shiftWeek(-1)">← 이전 주</button>
+    <div class="week-label" id="week-label"></div>
+    <button class="btn btn-ghost" onclick="shiftWeek(1)">다음 주 →</button>
+  </div>
+
+  <div class="week-grid" id="grid"></div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('planner');
+
+  let weekOffset = 0;
+
+  function populateSelectors() {
+    const sel = document.getElementById('filter-subject');
+    sel.innerHTML = `<option value="">전체 과목 표시</option>` +
+      DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  }
+
+  function startOfWeek(offset = 0) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay(); // 0 = Sun
+    const diff = -day + (offset * 7);
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  function ymd(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
+  function shiftWeek(delta) { weekOffset += delta; render(); }
+
+  function addPlan(dateStr, inputEl, subjectSelEl) {
+    const text = inputEl.value.trim();
+    const subjectId = subjectSelEl.value;
+    if (!text) return;
+    if (!subjectId) { alert('과목을 선택하세요.'); return; }
+    DATA.planner.push({ id: newId('p'), date: dateStr, subjectId, text, done: false });
+    commit();
+    inputEl.value = '';
+    render();
+    setTimeout(() => { document.getElementById(`addtext-${dateStr}`)?.focus(); }, 50);
+  }
+
+  function togglePlan(id) {
+    const p = DATA.planner.find(x => x.id === id);
+    p.done = !p.done;
+    commit();
+    render();
+  }
+
+  function removePlan(id) {
+    DATA.planner = DATA.planner.filter(p => p.id !== id);
+    commit();
+    render();
+  }
+
+  function render() {
+    populateSelectors();
+    const start = startOfWeek(weekOffset);
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    document.getElementById('week-label').textContent =
+      `${start.getFullYear()}.${String(start.getMonth()+1).padStart(2,'0')}.${String(start.getDate()).padStart(2,'0')}` +
+      ` — ${end.getFullYear()}.${String(end.getMonth()+1).padStart(2,'0')}.${String(end.getDate()).padStart(2,'0')}`;
+
+    const todayStr = today();
+    const fsub = document.getElementById('filter-subject').value;
+    const dayNames = ['일','월','화','수','목','금','토'];
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const dateStr = ymd(d);
+      const isToday = dateStr === todayStr;
+      const isWeekend = i === 0 || i === 6;
+
+      let plans = DATA.planner.filter(p => p.date === dateStr);
+      if (fsub) plans = plans.filter(p => p.subjectId === fsub);
+      plans.sort((a, b) => Number(a.done) - Number(b.done));
+
+      const subjectOptions = DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+      const html = `
+        <div class="day-col ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}">
+          <div class="day-head">
+            <div class="day-name">${dayNames[i]}</div>
+            <div class="day-num">${d.getDate()}</div>
+          </div>
+          <div class="day-items">
+            ${plans.map(p => {
+              const sub = getSubject(p.subjectId);
+              return `
+                <div class="plan-item ${p.done ? 'done' : ''}">
+                  <span class="plan-subject-dot plan-dot-${sub ? sub.color : 'navy'}"></span>
+                  <input type="checkbox" class="plan-cb" ${p.done ? 'checked' : ''} onchange="togglePlan('${p.id}')">
+                  <span class="plan-text">${escapeHtml(p.text)}</span>
+                  <span class="plan-x no-print" onclick="removePlan('${p.id}')">×</span>
+                </div>`;
+            }).join('')}
+          </div>
+          <div class="day-add no-print">
+            <select class="day-add-subject" id="addsub-${dateStr}">
+              ${subjectOptions}
+            </select>
+            <input type="text" class="day-add-input" id="addtext-${dateStr}" placeholder="+ 계획 추가"
+                   onkeydown="if(event.key==='Enter') addPlan('${dateStr}', this, document.getElementById('addsub-${dateStr}'))">
+          </div>
+        </div>
+      `;
+      grid.insertAdjacentHTML('beforeend', html);
+    }
+  }
+
+  render();
+</script>
+</body>
+</html>

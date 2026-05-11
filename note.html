@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 개념 노트</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .note-grid { display: grid; grid-template-columns: 320px 1fr; gap: 1.25rem; align-items: start; }
+
+  .note-side { position: sticky; top: 80px; }
+
+  .note-item {
+    padding: 0.75rem 0.9rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .note-item:hover { border-color: var(--navy-soft); }
+  .note-item.selected { border-color: var(--navy); background: var(--navy-pale); }
+  .note-item-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--ink);
+    margin-bottom: 0.25rem;
+    line-height: 1.3;
+  }
+  .note-item-meta {
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    color: var(--ink-light);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .note-body { min-height: 400px; }
+  .note-title-input {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.5rem;
+    color: var(--navy);
+    border: none;
+    background: transparent;
+    width: 100%;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 1rem;
+  }
+  .note-title-input:focus { outline: none; border-bottom-color: var(--navy); }
+
+  .note-content {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.8;
+    width: 100%;
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    padding: 1.25rem;
+    border-radius: var(--radius);
+    min-height: 400px;
+    resize: vertical;
+  }
+  .note-content:focus { outline: none; border-color: var(--navy-soft); }
+
+  .note-meta-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .tag-input-row {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+  }
+  .tag-chip {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    background: var(--violet-pale);
+    color: var(--violet);
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .tag-chip-x { cursor: pointer; opacity: 0.6; }
+  .tag-chip-x:hover { opacity: 1; }
+
+  @media (max-width: 900px) {
+    .note-grid { grid-template-columns: 1fr; }
+    .note-side { position: static; }
+  }
+
+  @media print {
+    .note-grid { grid-template-columns: 1fr; }
+    .note-side, .note-meta-bar, .toolbar { display: none !important; }
+    .note-content {
+      border: none !important;
+      padding: 0 !important;
+      background: white !important;
+      min-height: auto !important;
+    }
+    .note-title-input {
+      border: none !important;
+      border-bottom: 2px solid #000 !important;
+    }
+    #print-all .note-print-block {
+      page-break-after: always;
+      margin-bottom: 2rem;
+    }
+    #print-all .note-print-block:last-child { page-break-after: auto; }
+  }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Concept Notes</div>
+    <h1 class="page-title">개념 정리 노트</h1>
+    <p class="page-subtitle">단원별 핵심 개념을 정리합니다. 좌측에서 노트를 선택하거나 새로 만드세요.</p>
+  </header>
+
+  <div class="toolbar no-print">
+    <button class="btn btn-primary" onclick="createNote()">+ 새 노트</button>
+    <select class="select" id="filter-subject" onchange="render()" style="max-width: 200px;">
+      <option value="">전체 과목</option>
+    </select>
+    <input type="text" class="input" id="filter-search" placeholder="제목·내용 검색" oninput="render()" style="max-width: 240px;">
+    <div class="toolbar-spacer"></div>
+    <button class="btn" onclick="window.print()">🖶 인쇄/PDF</button>
+    <button class="btn" onclick="printAll()">전체 인쇄</button>
+  </div>
+
+  <div class="note-grid">
+    <aside class="note-side" id="side"></aside>
+    <section class="note-body card" id="body"></section>
+  </div>
+
+  <!-- hidden region for "print all" -->
+  <div id="print-all" style="display:none;"></div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('note');
+
+  let selectedId = null;
+
+  function populateSubjectFilters() {
+    const sel = document.getElementById('filter-subject');
+    sel.innerHTML = `<option value="">전체 과목</option>` +
+      DATA.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  }
+
+  function createNote() {
+    if (DATA.subjects.length === 0) {
+      alert('먼저 과목을 추가해 주세요.');
+      window.location.href = 'subjects.html';
+      return;
+    }
+    const note = {
+      id: newId('n'),
+      subjectId: DATA.subjects[0].id,
+      title: '제목 없음',
+      content: '',
+      tags: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    DATA.notes.unshift(note);
+    commit();
+    selectedId = note.id;
+    render();
+  }
+
+  function deleteNote(id) {
+    if (!confirm('이 노트를 삭제할까요?')) return;
+    DATA.notes = DATA.notes.filter(n => n.id !== id);
+    commit();
+    if (selectedId === id) selectedId = null;
+    render();
+  }
+
+  function selectNote(id) { selectedId = id; render(); }
+
+  function updateNote(id, patch) {
+    const n = DATA.notes.find(x => x.id === id);
+    if (!n) return;
+    Object.assign(n, patch, { updatedAt: Date.now() });
+    commit();
+    renderSide();
+  }
+
+  function addTag(id) {
+    const input = document.getElementById('tag-input');
+    const v = input.value.trim();
+    if (!v) return;
+    const n = DATA.notes.find(x => x.id === id);
+    if (!n.tags.includes(v)) {
+      n.tags.push(v);
+      commit();
+    }
+    input.value = '';
+    renderBody();
+  }
+
+  function removeTag(id, tag) {
+    const n = DATA.notes.find(x => x.id === id);
+    n.tags = n.tags.filter(t => t !== tag);
+    commit();
+    renderBody();
+  }
+
+  function filteredNotes() {
+    const fsub = document.getElementById('filter-subject')?.value || '';
+    const fq = (document.getElementById('filter-search')?.value || '').toLowerCase();
+    return DATA.notes
+      .filter(n => !fsub || n.subjectId === fsub)
+      .filter(n => !fq || n.title.toLowerCase().includes(fq) || n.content.toLowerCase().includes(fq))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  function renderSide() {
+    const side = document.getElementById('side');
+    const notes = filteredNotes();
+    if (notes.length === 0) {
+      side.innerHTML = `<div class="empty"><div class="empty-mark">·</div>노트가 없습니다.</div>`;
+      return;
+    }
+    side.innerHTML = notes.map(n => {
+      const sub = getSubject(n.subjectId);
+      const date = new Date(n.updatedAt);
+      return `
+        <div class="note-item ${n.id === selectedId ? 'selected' : ''}" onclick="selectNote('${n.id}')">
+          <div class="note-item-title">${escapeHtml(n.title || '제목 없음')}</div>
+          <div class="note-item-meta">
+            <span class="subject-tag tag-${sub ? sub.color : 'navy'}">
+              <span class="subject-dot dot-${sub ? sub.color : 'navy'}"></span>
+              ${escapeHtml(sub ? sub.name : '기타')}
+            </span>
+            <span>${date.getMonth()+1}/${date.getDate()}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderBody() {
+    const body = document.getElementById('body');
+    const note = DATA.notes.find(n => n.id === selectedId);
+    if (!note) {
+      body.innerHTML = `<div class="empty"><div class="empty-mark">·</div>좌측에서 노트를 선택하거나<br>새 노트를 만들어 주세요.</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <div class="note-meta-bar no-print">
+        <div class="flex gap-1" style="align-items: center;">
+          <label class="label mb-0">과목</label>
+          <select class="select" style="max-width: 200px;" onchange="updateNote('${note.id}', {subjectId: this.value})">
+            ${DATA.subjects.map(s => `<option value="${s.id}" ${s.id === note.subjectId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="deleteNote('${note.id}')">노트 삭제</button>
+      </div>
+      <input type="text" class="note-title-input" value="${escapeHtml(note.title)}"
+             oninput="updateNote('${note.id}', {title: this.value})" placeholder="제목을 입력하세요">
+      <textarea class="note-content" oninput="updateNote('${note.id}', {content: this.value})"
+                placeholder="개념·정의·핵심 포인트·예시 등을 자유롭게 정리하세요.&#10;&#10;권장 구조:&#10;1. 핵심 정의&#10;2. 출제 포인트&#10;3. 예시 / 적용&#10;4. 헷갈리는 점 / 오답 패턴">${escapeHtml(note.content)}</textarea>
+      <div class="no-print">
+        <div class="tag-input-row">
+          ${note.tags.map(t => `
+            <span class="tag-chip">
+              ${escapeHtml(t)}
+              <span class="tag-chip-x" onclick="removeTag('${note.id}','${escapeHtml(t)}')">×</span>
+            </span>
+          `).join('')}
+          <input type="text" id="tag-input" class="input" placeholder="태그 추가 후 Enter"
+                 style="max-width: 200px;" onkeydown="if(event.key==='Enter'){addTag('${note.id}');event.preventDefault();}">
+        </div>
+      </div>
+    `;
+  }
+
+  function printAll() {
+    const notes = filteredNotes();
+    if (notes.length === 0) { alert('인쇄할 노트가 없습니다.'); return; }
+
+    const html = notes.map(n => {
+      const sub = getSubject(n.subjectId);
+      return `
+        <div class="note-print-block">
+          <div style="font-family: var(--font-sans); font-size: 0.75rem; color: #555; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.3rem;">
+            ${escapeHtml(sub ? sub.name : '기타')}
+          </div>
+          <h2 style="font-family: var(--font-display); font-weight: 500; font-size: 1.5rem; color: #000; border-bottom: 2px solid #000; padding-bottom: 0.4rem; margin-bottom: 1rem;">
+            ${escapeHtml(n.title || '제목 없음')}
+          </h2>
+          <div style="white-space: pre-wrap; font-family: var(--font-body); line-height: 1.8;">${escapeHtml(n.content)}</div>
+          ${n.tags.length ? `<div style="margin-top: 1rem; font-family: var(--font-sans); font-size: 0.75rem; color: #777;">태그: ${n.tags.map(escapeHtml).join(' · ')}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const printDiv = document.getElementById('print-all');
+    printDiv.innerHTML = html;
+    document.querySelectorAll('.note-grid, .toolbar').forEach(el => el.style.display = 'none');
+    printDiv.style.display = 'block';
+    window.print();
+    setTimeout(() => {
+      printDiv.style.display = 'none';
+      printDiv.innerHTML = '';
+      document.querySelectorAll('.note-grid, .toolbar').forEach(el => el.style.display = '');
+    }, 500);
+  }
+
+  function render() {
+    populateSubjectFilters();
+    renderSide();
+    renderBody();
+  }
+  render();
+</script>
+</body>
+</html>

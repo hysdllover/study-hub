@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Study Hub — 과목 관리</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .subject-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  .subject-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .subject-row .input { flex: 1; }
+  .color-swatches { display: flex; gap: 0.35rem; }
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s ease;
+  }
+  .swatch.active { border-color: var(--ink); transform: scale(1.1); }
+  .swatch-navy   { background: var(--navy); }
+  .swatch-olive  { background: var(--olive); }
+  .swatch-violet { background: var(--violet); }
+  .swatch-rose   { background: var(--rose); }
+
+  @media (max-width: 800px) {
+    .subject-list { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<nav class="top-nav no-print">
+  <a href="index.html" class="brand"><span class="brand-mark"></span>Study Hub</a>
+  <div class="nav-links"></div>
+</nav>
+
+<main class="container">
+  <header class="page-header">
+    <div class="page-eyebrow">Subjects</div>
+    <h1 class="page-title">과목 관리</h1>
+    <p class="page-subtitle">학습할 과목을 추가하고 색상을 지정합니다. 노트·오답·카드 등 모든 도구가 이 과목 목록을 공유합니다.</p>
+  </header>
+
+  <div class="card mb-2 no-print">
+    <div class="card-header">
+      <div class="card-title">새 과목 추가</div>
+    </div>
+    <div class="form-grid form-grid-2">
+      <div>
+        <label class="label">과목 이름</label>
+        <input type="text" id="new-name" class="input" placeholder="예: 생명과학Ⅰ, 화법과 작문">
+      </div>
+      <div>
+        <label class="label">색상</label>
+        <div class="color-swatches" id="new-color-picker" style="padding-top: 0.4rem;">
+          <div class="swatch swatch-navy active"   data-color="navy"></div>
+          <div class="swatch swatch-olive"         data-color="olive"></div>
+          <div class="swatch swatch-violet"        data-color="violet"></div>
+          <div class="swatch swatch-rose"          data-color="rose"></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top: 1rem;">
+      <button class="btn btn-primary" onclick="addNewSubject()">+ 과목 추가</button>
+    </div>
+  </div>
+
+  <h2 class="section-title" style="font-family: var(--font-display); font-weight: 500; font-size: 1.15rem; color: var(--navy); margin-bottom: 0.75rem;">등록된 과목</h2>
+  <div class="subject-list" id="list"></div>
+</main>
+
+<script src="shared.js"></script>
+<script>
+  renderNav('subjects');
+  let newColor = 'navy';
+
+  document.querySelectorAll('#new-color-picker .swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      document.querySelectorAll('#new-color-picker .swatch').forEach(x => x.classList.remove('active'));
+      s.classList.add('active');
+      newColor = s.dataset.color;
+    });
+  });
+
+  function addNewSubject() {
+    const name = document.getElementById('new-name').value.trim();
+    if (!name) { alert('과목 이름을 입력해 주세요.'); return; }
+    if (DATA.subjects.some(s => s.name === name)) { alert('같은 이름의 과목이 이미 있습니다.'); return; }
+    addSubject(name, newColor);
+    document.getElementById('new-name').value = '';
+    render();
+  }
+
+  function render() {
+    const list = document.getElementById('list');
+    if (DATA.subjects.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="empty-mark">·</div>등록된 과목이 없습니다.</div>`;
+      return;
+    }
+    list.innerHTML = DATA.subjects.map(s => `
+      <div class="subject-row">
+        <span class="subject-dot dot-${s.color}"></span>
+        <input type="text" class="input" value="${escapeHtml(s.name)}" onchange="renameSubject('${s.id}', this.value)">
+        <div class="color-swatches">
+          ${['navy','olive','violet','rose'].map(c => `
+            <div class="swatch swatch-${c} ${s.color === c ? 'active' : ''}" onclick="changeColor('${s.id}','${c}')"></div>
+          `).join('')}
+        </div>
+        <button class="btn btn-sm btn-ghost btn-danger" onclick="removeSubject('${s.id}')">삭제</button>
+      </div>
+    `).join('');
+  }
+
+  function renameSubject(id, value) {
+    const v = value.trim();
+    if (!v) { alert('이름은 비울 수 없습니다.'); render(); return; }
+    updateSubject(id, { name: v });
+    render();
+  }
+
+  function changeColor(id, color) {
+    updateSubject(id, { color });
+    render();
+  }
+
+  function removeSubject(id) {
+    const s = getSubject(id);
+    if (!confirm(`'${s.name}' 과목을 삭제할까요?\n(이 과목에 연결된 노트·오답·카드 등은 '기타'로 표시됩니다.)`)) return;
+    deleteSubject(id);
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>
